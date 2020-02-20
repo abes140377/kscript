@@ -3,6 +3,7 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 plugins {
     kotlin("jvm") version "1.2.70"
     id("com.github.johnrengelman.shadow") version "2.0.4"
+    `maven-publish`
 }
 
 group = "com.github.holgerbrandl.kscript.launcher"
@@ -13,7 +14,7 @@ dependencies {
 
     compile("com.offbytwo:docopt:0.6.0.20150202")
 
-    compile("com.jcabi:jcabi-aether:1.0-SNAPSHOT") {
+    compile("com.jcabi:jcabi-aether:1.0-SNAPSHOT") { // bad to use snapshots but this was the only way to make it work behind proxy
         exclude("org.hibernate", "hibernate-validator")
         exclude("org.slf4j", "slf4j-api")
         exclude("org.slf4j", "jcl-over-slf4j")
@@ -68,4 +69,12 @@ tasks.register<Zip>("packageDist") {
     from("$buildDir/libs")
 
     dependsOn(":build")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("zipDistribution") {
+            artifact(tasks["packageDist"])
+        }
+    }
 }
