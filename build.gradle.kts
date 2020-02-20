@@ -6,13 +6,14 @@ plugins {
 }
 
 group = "com.github.holgerbrandl.kscript.launcher"
+version = "2.9.3"
 
 dependencies {
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib")
+    compile("org.jetbrains.kotlin:kotlin-stdlib")
 
     compile("com.offbytwo:docopt:0.6.0.20150202")
 
-    compile("com.jcabi:jcabi-aether:0.10.1") {
+    compile("com.jcabi:jcabi-aether:1.0-SNAPSHOT") {
         exclude("org.hibernate", "hibernate-validator")
         exclude("org.slf4j", "slf4j-api")
         exclude("org.slf4j", "jcl-over-slf4j")
@@ -31,6 +32,7 @@ dependencies {
 
 repositories {
     jcenter()
+    maven(url = "https://oss.sonatype.org/content/repositories/snapshots")
 }
 
 val shadowJar by tasks.getting(ShadowJar::class) {
@@ -55,4 +57,15 @@ val assemble by tasks.getting {
 
 val test by tasks.getting {
     inputs.dir("${project.projectDir}/test/resources")
+}
+
+tasks.register<Zip>("packageDist") {
+    description = "Package kscript.zip distribution archive from files in build/dist"
+
+    archiveFileName.set("kscript-${version}-bin.zip")
+    destinationDirectory.set(file("$buildDir/dist"))
+
+    from("$buildDir/libs")
+
+    dependsOn(":build")
 }
