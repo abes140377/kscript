@@ -83,6 +83,8 @@ fun decodeEnv(value: String): String {
 
 fun resolveDependenciesViaAether(depIds: List<String>, customRepos: List<MavenRepo>, loggingEnabled: Boolean): List<Artifact> {
     val jcenter = RemoteRepository("jcenter", "default", "https://jcenter.bintray.com/")
+    val mavenCentral = RemoteRepository("mavenCentral", "default", "https://repo1.maven.org/maven2/")
+
     val customRemoteRepos = customRepos.map { mavenRepo ->
         RemoteRepository(mavenRepo.id, "default", mavenRepo.url).apply {
             if (!mavenRepo.user.isNullOrEmpty() && !mavenRepo.password.isNullOrEmpty()) {
@@ -90,7 +92,7 @@ fun resolveDependenciesViaAether(depIds: List<String>, customRepos: List<MavenRe
             }
         }
     }
-    val remoteRepos = customRemoteRepos + jcenter
+    val remoteRepos = customRemoteRepos + jcenter + mavenCentral
 
     val aether = Aether(remoteRepos, File(System.getProperty("user.home") + "/.m2/repository"))
     return depIds.flatMap {
