@@ -147,21 +147,18 @@ fun main(args: Array<String>) {
     val dependencies = (script.collectDependencies() + Script(rawScript).collectDependencies()).distinct()
     val customRepos = (script.collectRepos() + Script(rawScript).collectRepos()).distinct()
 
-
-    //  Create temporary dev environment
-    if (docopt.getBoolean("idea")) {
-        println(launchIdeaWithKscriptlet(rawScript, userArgs, dependencies, customRepos, includeURLs))
-        exitProcess(0)
-    }
-
-
-    val classpath = resolveDependencies(dependencies, customRepos, loggingEnabled) ?: ""
-    val optionalCpArg = if (classpath.isNotEmpty()) "-classpath '${classpath}'" else ""
-
     // Extract kotlin arguments
     val kotlinOpts = script.collectRuntimeOptions()
     val compilerOpts = script.collectCompilerOptions()
 
+    //  Create temporary dev environment
+    if (docopt.getBoolean("idea")) {
+        println(launchIdeaWithKscriptlet(rawScript, userArgs, dependencies, customRepos, includeURLs, compilerOpts))
+        exitProcess(0)
+    }
+
+    val classpath = resolveDependencies(dependencies, customRepos, loggingEnabled) ?: ""
+    val optionalCpArg = if (classpath.isNotEmpty()) "-classpath '${classpath}'" else ""
 
     //  Optionally enter interactive mode
     if (docopt.getBoolean("interactive")) {
@@ -257,10 +254,15 @@ fun main(args: Array<String>) {
             ""
         }
 
-        val scriptCompileResult = evalBash("kotlinc ${compilerOpts} ${optionalCpArg} -d '${jarFile.absolutePath}' '${scriptFile.absolutePath}' ${wrapperSrcArg}")
-        with(scriptCompileResult) {
-            errorIf(exitCode != 0) { "compilation of '$scriptResource' failed\n$stderr" }
-        }
+        val cmd = "kotlinc ${compilerOpts} ${optionalCpArg} -d '${jarFile.absolutePath}' '${scriptFile.absolutePath}' ${wrapperSrcArg}"
+
+        println(cmd)
+        quit(1)
+
+//        val scriptCompileResult = evalBash("kotlinc ${compilerOpts} ${optionalCpArg} -d '${jarFile.absolutePath}' '${scriptFile.absolutePath}' ${wrapperSrcArg}")
+//        with(scriptCompileResult) {
+//            errorIf(exitCode != 0) { "compilation of '$scriptResource' failed\n$stderr" }
+//        }
     }
 
 
@@ -286,7 +288,6 @@ fun main(args: Array<String>) {
 
     println("kotlin ${kotlinOpts} -classpath \"${extClassPath}\" ${execClassName} ${joinedUserArgs} ")
 }
-
 
 /** Determine the latest version by checking github repo and print info if newer version is available. */
 private fun versionCheck() {

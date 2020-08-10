@@ -200,8 +200,14 @@ private fun bytesToHex(buffer: ByteArray): String {
 fun numLines(str: String) = str.split("\r\n|\r|\n".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray().size
 
 
-fun launchIdeaWithKscriptlet(scriptFile: File, userArgs: List<String>, dependencies: List<String>, customRepos: List<MavenRepo>, includeURLs: List<URL>): String {
-    requireInPath("idea", "Could not find 'idea' in your PATH. It can be created in IntelliJ under `Tools -> Create Command-line Launcher`")
+fun launchIdeaWithKscriptlet(scriptFile: File,
+                             userArgs: List<String>,
+                             dependencies: List<String>,
+                             customRepos: List<MavenRepo>,
+                             includeURLs: List<URL>,
+                             compilerOpts: String): String {
+    val intellijCommand = System.getenv("KSCRIPT_IDEA_COMMAND") ?: "idea"
+    requireInPath("$intellijCommand", "Could not find '$intellijCommand' in your PATH. You must set the command used to launch your intellij as 'KSCRIPT_IDEA_COMMAND' env property")
 
     infoMsg("Setting up idea project from ${scriptFile}")
 
@@ -240,12 +246,60 @@ fun launchIdeaWithKscriptlet(scriptFile: File, userArgs: List<String>, dependenc
         """.trimIndent()
     )
 
-    val stringifiedDeps = dependencies.map { "    compile \"$it\"" }.joinToString("\n")
-    val stringifiedRepos = customRepos.map { "    maven {\n        url '${it.url}'\n    }\n" }.joinToString("\n")
+    val stringifiedDeps = dependencies.map {
+        """
+|    implementation("$it")
+""".trimMargin()
+    }.joinToString("\n")
+
+    fun MavenRepo.stringifiedRepoCredentials(): String{
+       return  takeIf { user.isNotBlank() || password.isNotBlank() }?.let {
+            """
+|        credentials {
+|            username = "${it.user}"
+|            password = "${it.password}"
+|        }
+        """
+        } ?: ""
+    }
+
+    val stringifiedRepos = customRepos.map {
+        """
+|    maven {
+|        url = uri("${it.url}")
+         ${it.stringifiedRepoCredentials()}
+|    }
+    """.trimMargin()
+    }.joinToString("\n")
+
+    // We split on space after having joined by space so we have lost some information on how
+    // the options where passed. It might cause some issues if some compiler options contain spaces
+    // but it's not the case of jvmTarget so we should be fine.
+    val opts = compilerOpts.split(" ")
+        .filter { it.isNotBlank() }
+
+    var jvmTargetOption: String? = null
+    for (i in opts.indices) {
+        if (i > 0 && opts[i - 1] == "-jvm-target") {
+            jvmTargetOption = opts[i]
+        }
+    }
+
+    val kotlinOptions = if (jvmTargetOption != null) {
+        """
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    kotlinOptions { 
+        jvmTarget = "$jvmTargetOption"
+    }
+}
+""".trimIndent()
+    } else {
+        ""
+    }
 
     val gradleScript = """
 plugins {
-    id "org.jetbrains.kotlin.jvm" version "${KotlinVersion.CURRENT}"
+    id("org.jetbrains.kotlin.jvm") version "${KotlinVersion.CURRENT}"
 }
 
 repositories {
@@ -255,16 +309,18 @@ $stringifiedRepos
 }
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib"
-    compile "org.jetbrains.kotlin:kotlin-script-runtime"
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
+    implementation("org.jetbrains.kotlin:kotlin-script-runtime")
 $stringifiedDeps
 }
 
-sourceSets.main.java.srcDirs 'src'
-sourceSets.test.java.srcDirs 'src'
+sourceSets.getByName("main").java.srcDirs("src")
+sourceSets.getByName("test").java.srcDirs("src")
+
+$kotlinOptions
     """.trimIndent()
 
-    File(tmpProjectDir, "build.gradle").writeText(gradleScript)
+    File(tmpProjectDir, "build.gradle.kts").writeText(gradleScript)
 
     // also copy/symlink script resource in
     File(tmpProjectDir, "src").run {
@@ -272,24 +328,32 @@ sourceSets.test.java.srcDirs 'src'
 
         // https://stackoverflow.com/questions/17926459/creating-a-symbolic-link-with-java
         createSymLink(File(this, scriptFile.name), scriptFile)
+        val scriptDir = Paths.get(scriptFile.path).parent
 
         // also symlink all includes
         includeURLs.distinctBy { it.fileName() }
-          .forEach {
+                .forEach {
+                    val symlinkSrcDirAndDestination = when {
+                        it.protocol == "file" -> {
+                            val includeFile = File(it.toURI())
+                            val includeDir = Paths.get(includeFile.path).parent
+                            val symlinkRelativePathToScript = File(this, scriptDir.relativize(includeDir).toFile().path)
+                            symlinkRelativePathToScript.mkdirs()
+                            Pair(symlinkRelativePathToScript, includeFile)
+                        }
 
-            val includeFile = when {
-                it.protocol == "file" -> File(it.toURI())
-                else -> fetchFromURL(it.toString())
-            }
-
-            createSymLink(File(this, it.fileName()), includeFile)
-        }
+                        else -> {
+                            Pair(this, fetchFromURL(it.toString()))
+                        }
+                    }
+                    createSymLink(File(symlinkSrcDirAndDestination.first, it.fileName()), symlinkSrcDirAndDestination.second)
+                }
     }
 
     val projectPath = tmpProjectDir.absolutePath
     infoMsg("Project set up at $projectPath")
 
-    return "idea \"$projectPath\""
+    return "$intellijCommand \"$projectPath\""
 }
 
 private fun URL.fileName() = this.toURI().path.split("/").last()
