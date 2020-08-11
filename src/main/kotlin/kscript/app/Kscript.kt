@@ -254,15 +254,19 @@ fun main(args: Array<String>) {
             ""
         }
 
-        val cmd = "kotlinc ${compilerOpts} ${optionalCpArg} -d '${jarFile.absolutePath}' '${scriptFile.absolutePath}' ${wrapperSrcArg}"
+        val cmd = "kotlinc $compilerOpts $optionalCpArg -d '${jarFile.absolutePath}' '${scriptFile.absolutePath}' ${wrapperSrcArg}"
 
-        println(cmd)
-        quit(1)
+        val os = System.getProperty("os.name")
 
-//        val scriptCompileResult = evalBash("kotlinc ${compilerOpts} ${optionalCpArg} -d '${jarFile.absolutePath}' '${scriptFile.absolutePath}' ${wrapperSrcArg}")
-//        with(scriptCompileResult) {
-//            errorIf(exitCode != 0) { "compilation of '$scriptResource' failed\n$stderr" }
-//        }
+        if(os.startsWith("Windows")) {
+            println(cmd)
+            quit(1)
+        } else {
+            val scriptCompileResult = evalBash(cmd)
+            with(scriptCompileResult) {
+                errorIf(exitCode != 0) { "compilation of '$scriptResource' failed\n$stderr" }
+            }
+        }
     }
 
 
