@@ -1,4 +1,20 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.security.InvalidKeyException;
+
+import io.minio.MinioClient;
+import io.minio.errors.MinioException;
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("io.minio:minio:7.1.0")
+    }
+}
 
 plugins {
     kotlin("jvm") version "1.2.70"
@@ -76,5 +92,39 @@ publishing {
         create<MavenPublication>("zipDistribution") {
             artifact(tasks["packageDist"])
         }
+    }
+}
+
+tasks.register<Greeting>("hello") {
+    group = "Welcome"
+    description = "Produces a world greeting"
+
+    message = "Hello"
+    recipient = "World"
+}
+
+open class Greeting: DefaultTask() {
+    lateinit var message: String
+    lateinit var recipient: String
+
+    @TaskAction
+    fun sayGreeting() {
+        // Create a minioClient with the MinIO Server name, Port, Access key and Secret key.
+        val minioClient = MinioClient("http://minio.dzbw.de:9900", "admin", "admin123")
+
+        // Check if the bucket already exists.
+        val isExist = minioClient.bucketExists(BucketExistsArgs.builder().bucket("software/kscript").build());
+        if(isExist) {
+            println("Bucket already exists.");
+        } else {
+            // Make a new bucket called asiatrip to hold a zip file of photos.
+            minioClient.makeBucket(MakeBucketArgs.builder().bucket("software/kscript").build());
+        }
+
+        // Upload the zip file to the bucket with putObject
+        minioClient.putObject("software/kscript", "build/dist/kscript-2.9.3-bin.zip", null);
+        System.out.println("/home/user/Photos/asiaphotos.zip is successfully uploaded as asiaphotos.zip to `asiatrip` bucket.");
+
+        println("$message, $recipient!")
     }
 }
